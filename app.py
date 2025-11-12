@@ -147,23 +147,6 @@ def main():
             key="single_input"
         )
         
-        # Quick examples
-        st.write("**Quick examples:**")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("😊 Positive Example", use_container_width=True):
-                st.session_state.single_text = "I absolutely love this product! It's amazing and perfect!"
-        with col2:
-            if st.button("😞 Negative Example", use_container_width=True):
-                st.session_state.single_text = "This is terrible and awful. Worst experience ever."
-        with col3:
-            if st.button("😐 Neutral Example", use_container_width=True):
-                st.session_state.single_text = "It's okay, nothing special about this product."
-        
-        # Use session state if set
-        if hasattr(st.session_state, 'single_text'):
-            text_input = st.session_state.single_text
-        
         # Analyze button
         if st.button("Analyze Sentiment", type="primary", key="analyze_single"):
             if text_input.strip():
@@ -220,7 +203,7 @@ def main():
         st.subheader("Enter multiple texts (one per line):")
         batch_text = st.text_area(
             "Batch texts:",
-            placeholder="Enter each text on a new line...\n\nExample:\nI love this product!\nThis is terrible.\nIt's okay, nothing special.",
+            placeholder="Enter each text on a new line...",
             height=200,
             key="batch_input"
         )
