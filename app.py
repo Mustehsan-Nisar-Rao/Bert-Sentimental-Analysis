@@ -1,254 +1,325 @@
 import streamlit as st
-import torch
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import pandas as pd
 import matplotlib.pyplot as plt
-import time
+import pandas as pd
 
-# Set page configuration
 st.set_page_config(
-    page_title="Sentiment Analysis App",
+    page_title="Sentiment Analysis",
     page_icon="😊",
     layout="wide"
 )
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
 <style>
+    .positive { 
+        background-color: #d4edda; 
+        color: #155724; 
+        padding: 15px; 
+        border-radius: 10px; 
+        border-left: 5px solid #28a745;
+        font-weight: bold;
+        font-size: 1.3rem;
+    }
+    .negative { 
+        background-color: #f8d7da; 
+        color: #721c24; 
+        padding: 15px; 
+        border-radius: 10px; 
+        border-left: 5px solid #dc3545;
+        font-weight: bold;
+        font-size: 1.3rem;
+    }
+    .neutral { 
+        background-color: #fff3cd; 
+        color: #856404; 
+        padding: 15px; 
+        border-radius: 10px; 
+        border-left: 5px solid #ffc107;
+        font-weight: bold;
+        font-size: 1.3rem;
+    }
     .main-header {
-        font-size: 3rem;
-        color: #1f77b4;
         text-align: center;
+        color: #1f77b4;
         margin-bottom: 2rem;
-    }
-    .sentiment-positive {
-        color: #2ecc71;
-        font-weight: bold;
-        font-size: 1.2rem;
-    }
-    .sentiment-negative {
-        color: #e74c3c;
-        font-weight: bold;
-        font-size: 1.2rem;
-    }
-    .sentiment-neutral {
-        color: #f39c12;
-        font-weight: bold;
-        font-size: 1.2rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# App title
-st.markdown('<h1 class="main-header">😊 Sentiment Analysis App</h1>', unsafe_allow_html=True)
-st.markdown("### Powered by Fine-tuned BERT Model")
-
-# Initialize the model
 @st.cache_resource
-def load_model():
-    """Load the sentiment analysis model from Hugging Face"""
+def load_sentiment_model():
+    """Load the sentiment analysis model with correct label mapping"""
     try:
-        # Using pipeline for simplicity
+        model_name = "mustehsannisarrao/fine-tune-bert-sentimental-analysis"
+        
+        # Load model and tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForSequenceClassification.from_pretrained(model_name)
+        
+        # Create classifier
         classifier = pipeline(
-            "sentiment-analysis",
-            model="mustehsannisarrao/fine-tune-bert-sentimental-analysis",
-            tokenizer="mustehsannisarrao/fine-tune-bert-sentimental-analysis"
+            "text-classification",
+            model=model,
+            tokenizer=tokenizer
         )
+        
         return classifier
+        
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None
 
-# Load the model
-with st.spinner("Loading sentiment analysis model..."):
-    classifier = load_model()
+def map_label_to_sentiment(label):
+    """Convert LABEL_X to actual sentiment based on your model's training"""
+    label_mapping = {
+        'LABEL_0': 'NEGATIVE',    # Based on: terrible, awful, worst
+        'LABEL_1': 'NEUTRAL',     # Assumed based on standard 3-class sentiment
+        'LABEL_2': 'POSITIVE'     # Based on: love, perfect
+    }
+    return label_mapping.get(label, label)
 
-if classifier is None:
-    st.error("Failed to load the model. Please check if the model name is correct.")
-    st.stop()
+def get_sentiment_emoji(sentiment):
+    """Get emoji for sentiment"""
+    emoji_map = {
+        'POSITIVE': '🎉',
+        'NEGATIVE': '😞', 
+        'NEUTRAL': '😐'
+    }
+    return emoji_map.get(sentiment, '❓')
 
-# Sidebar for additional options
-st.sidebar.title("Settings")
-st.sidebar.markdown("### Model Information")
-st.sidebar.write("**Model:** Fine-tuned BERT")
-st.sidebar.write("**Owner:** mustehsannisarrao")
-st.sidebar.write("**Task:** Sentiment Analysis")
-
-st.sidebar.markdown("### About")
-st.sidebar.info(
-    "This app uses a fine-tuned BERT model to analyze the sentiment of text. "
-    "It can classify text as positive, negative, or neutral."
-)
-
-# Main content area
-tab1, tab2, tab3 = st.tabs(["Single Text Analysis", "Batch Analysis", "API Usage"])
-
-with tab1:
-    st.header("Analyze Single Text")
+def create_confidence_chart(confidence, sentiment):
+    """Create a confidence visualization"""
+    fig, ax = plt.subplots(figsize=(8, 2))
     
-    # Text input
-    text_input = st.text_area(
-        "Enter text to analyze:",
-        placeholder="Type your text here...",
-        height=100
-    )
+    # Color based on sentiment
+    colors = {'POSITIVE': '#2ecc71', 'NEGATIVE': '#e74c3c', 'NEUTRAL': '#f39c12'}
+    color = colors.get(sentiment, '#95a5a6')
     
-    # Analyze button
-    if st.button("Analyze Sentiment", type="primary"):
-        if text_input.strip():
-            with st.spinner("Analyzing sentiment..."):
-                # Add a small delay to show the spinner
-                time.sleep(0.5)
-                
-                # Perform sentiment analysis
-                try:
-                    result = classifier(text_input)[0]
-                    
-                    # Display results
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.metric("Label", result['label'])
-                    
-                    with col2:
-                        st.metric("Confidence Score", f"{result['score']:.4f}")
-                    
-                    with col3:
-                        confidence_percent = result['score'] * 100
-                        st.metric("Confidence", f"{confidence_percent:.1f}%")
-                    
-                    # Visualize confidence
-                    fig, ax = plt.subplots(figsize=(8, 2))
-                    ax.barh(['Confidence'], [confidence_percent], color='skyblue')
-                    ax.set_xlim(0, 100)
-                    ax.set_xlabel('Confidence (%)')
-                    ax.axvline(x=80, color='red', linestyle='--', alpha=0.7, label='High Confidence')
-                    ax.legend()
-                    st.pyplot(fig)
-                    
-                    # Color-coded sentiment display
-                    sentiment = result['label'].upper()
-                    if 'POSITIVE' in sentiment:
-                        st.markdown(f'<p class="sentiment-positive">🎉 This text appears to be POSITIVE!</p>', unsafe_allow_html=True)
-                    elif 'NEGATIVE' in sentiment:
-                        st.markdown(f'<p class="sentiment-negative">😞 This text appears to be NEGATIVE!</p>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<p class="sentiment-neutral">😐 This text appears to be NEUTRAL!</p>', unsafe_allow_html=True)
-                        
-                except Exception as e:
-                    st.error(f"Error during analysis: {e}")
-        else:
-            st.warning("Please enter some text to analyze.")
+    ax.barh(['Confidence'], [confidence * 100], color=color, alpha=0.7)
+    ax.set_xlim(0, 100)
+    ax.set_xlabel('Confidence (%)')
+    ax.axvline(x=80, color='red', linestyle='--', alpha=0.3, label='High Confidence Threshold')
+    ax.legend()
+    
+    # Add value text
+    ax.text(confidence * 100, 0, f'{confidence*100:.1f}%', 
+            va='center', ha='right', fontweight='bold')
+    
+    return fig
 
-with tab2:
-    st.header("Batch Text Analysis")
+def main():
+    st.markdown('<h1 class="main-header">😊 BERT Sentiment Analysis</h1>', unsafe_allow_html=True)
+    st.markdown("### Using your fine-tuned model: `mustehsannisarrao/fine-tune-bert-sentimental-analysis`")
     
-    # Multiple text inputs
-    st.subheader("Enter multiple texts (one per line):")
-    batch_text = st.text_area(
-        "Batch texts:",
-        placeholder="Enter each text on a new line...\n\nExample:\nI love this product!\nThis is terrible.\nIt's okay, I guess.",
-        height=150
-    )
+    # Load model
+    with st.spinner("Loading your fine-tuned BERT model..."):
+        classifier = load_sentiment_model()
     
-    if st.button("Analyze Batch", type="primary"):
-        if batch_text.strip():
-            texts = [text.strip() for text in batch_text.split('\n') if text.strip()]
-            
-            if texts:
-                with st.spinner(f"Analyzing {len(texts)} texts..."):
+    if classifier is None:
+        st.error("Failed to load the model. Please check your internet connection.")
+        return
+    
+    # Sidebar with model info
+    st.sidebar.title("Model Information")
+    st.sidebar.markdown("""
+    **Model Details:**
+    - **Name:** Fine-tuned BERT
+    - **Task:** Sentiment Analysis
+    - **Classes:** 3 (Positive, Negative, Neutral)
+    - **Label Mapping:**
+      - LABEL_0 → NEGATIVE
+      - LABEL_1 → NEUTRAL  
+      - LABEL_2 → POSITIVE
+    """)
+    
+    # Main content
+    tab1, tab2, tab3 = st.tabs(["Single Analysis", "Batch Analysis", "Test Examples"])
+    
+    with tab1:
+        st.header("Analyze Single Text")
+        
+        # Text input
+        text_input = st.text_area(
+            "Enter your text:",
+            placeholder="Type your review, comment, or any text here...",
+            height=120,
+            key="single_input"
+        )
+        
+        # Quick examples
+        st.write("**Quick examples:**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("😊 Positive Example", use_container_width=True):
+                st.session_state.single_text = "I absolutely love this product! It's amazing and perfect!"
+        with col2:
+            if st.button("😞 Negative Example", use_container_width=True):
+                st.session_state.single_text = "This is terrible and awful. Worst experience ever."
+        with col3:
+            if st.button("😐 Neutral Example", use_container_width=True):
+                st.session_state.single_text = "It's okay, nothing special about this product."
+        
+        # Use session state if set
+        if hasattr(st.session_state, 'single_text'):
+            text_input = st.session_state.single_text
+        
+        # Analyze button
+        if st.button("Analyze Sentiment", type="primary", key="analyze_single"):
+            if text_input.strip():
+                with st.spinner("Analyzing sentiment..."):
                     try:
-                        results = classifier(texts)
+                        # Get prediction
+                        result = classifier(text_input)[0]
+                        original_label = result['label']
+                        confidence = result['score']
                         
-                        # Create results dataframe
-                        results_data = []
-                        for i, (text, result) in enumerate(zip(texts, results)):
-                            results_data.append({
-                                'Text': text[:50] + '...' if len(text) > 50 else text,
-                                'Full Text': text,
-                                'Sentiment': result['label'],
-                                'Confidence': result['score'],
-                                'Confidence %': f"{result['score'] * 100:.1f}%"
-                            })
-                        
-                        df = pd.DataFrame(results_data)
+                        # Map to actual sentiment
+                        sentiment = map_label_to_sentiment(original_label)
+                        emoji = get_sentiment_emoji(sentiment)
                         
                         # Display results
-                        st.subheader("Analysis Results")
+                        st.subheader("Results")
                         
-                        # Summary statistics
-                        sentiment_counts = df['Sentiment'].value_counts()
                         col1, col2, col3 = st.columns(3)
                         
                         with col1:
-                            st.metric("Total Texts", len(texts))
+                            st.metric("Sentiment", f"{emoji} {sentiment}")
+                        
                         with col2:
-                            st.metric("Unique Sentiments", len(sentiment_counts))
+                            st.metric("Confidence Score", f"{confidence:.4f}")
+                        
                         with col3:
-                            avg_confidence = df['Confidence'].mean() * 100
-                            st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
+                            st.metric("Confidence", f"{confidence*100:.1f}%")
                         
-                        # Display dataframe
-                        st.dataframe(df[['Text', 'Sentiment', 'Confidence %']], use_container_width=True)
+                        # Confidence chart
+                        st.pyplot(create_confidence_chart(confidence, sentiment))
                         
-                        # Download option
-                        csv = df.to_csv(index=False)
-                        st.download_button(
-                            label="Download Results as CSV",
-                            data=csv,
-                            file_name="sentiment_analysis_results.csv",
-                            mime="text/csv"
-                        )
+                        # Color-coded result
+                        if sentiment == 'POSITIVE':
+                            st.markdown(f'<div class="positive">{emoji} POSITIVE sentiment detected! The text expresses positive emotion.</div>', unsafe_allow_html=True)
+                        elif sentiment == 'NEGATIVE':
+                            st.markdown(f'<div class="negative">{emoji} NEGATIVE sentiment detected! The text expresses negative emotion.</div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<div class="neutral">{emoji} NEUTRAL sentiment detected! The text is neutral or mixed.</div>', unsafe_allow_html=True)
                         
+                        # Debug info
+                        with st.expander("Technical Details"):
+                            st.write(f"**Raw model output:** {result}")
+                            st.write(f"**Original label:** {original_label}")
+                            st.write(f"**Mapped sentiment:** {sentiment}")
+                            
                     except Exception as e:
-                        st.error(f"Error during batch analysis: {e}")
+                        st.error(f"Error during analysis: {e}")
             else:
-                st.warning("Please enter at least one valid text to analyze.")
-        else:
-            st.warning("Please enter some texts to analyze.")
+                st.warning("Please enter some text to analyze.")
+    
+    with tab2:
+        st.header("Batch Analysis")
+        
+        st.subheader("Enter multiple texts (one per line):")
+        batch_text = st.text_area(
+            "Batch texts:",
+            placeholder="Enter each text on a new line...\n\nExample:\nI love this product!\nThis is terrible.\nIt's okay, nothing special.",
+            height=200,
+            key="batch_input"
+        )
+        
+        if st.button("Analyze Batch", type="primary"):
+            if batch_text.strip():
+                texts = [text.strip() for text in batch_text.split('\n') if text.strip()]
+                
+                if texts:
+                    with st.spinner(f"Analyzing {len(texts)} texts..."):
+                        try:
+                            results = classifier(texts)
+                            
+                            # Process results
+                            analysis_data = []
+                            for i, (text, result) in enumerate(zip(texts, results)):
+                                sentiment = map_label_to_sentiment(result['label'])
+                                analysis_data.append({
+                                    'Text': text,
+                                    'Original_Label': result['label'],
+                                    'Sentiment': sentiment,
+                                    'Confidence': result['score'],
+                                    'Confidence_Percent': f"{result['score'] * 100:.1f}%"
+                                })
+                            
+                            df = pd.DataFrame(analysis_data)
+                            
+                            # Display summary
+                            st.subheader("Batch Analysis Summary")
+                            
+                            sentiment_counts = df['Sentiment'].value_counts()
+                            total_texts = len(df)
+                            avg_confidence = df['Confidence'].mean() * 100
+                            
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("Total Texts", total_texts)
+                            with col2:
+                                st.metric("Positive", sentiment_counts.get('POSITIVE', 0))
+                            with col3:
+                                st.metric("Negative", sentiment_counts.get('NEGATIVE', 0))
+                            with col4:
+                                st.metric("Neutral", sentiment_counts.get('NEUTRAL', 0))
+                            
+                            # Display detailed results
+                            st.subheader("Detailed Results")
+                            st.dataframe(df[['Text', 'Sentiment', 'Confidence_Percent']], use_container_width=True)
+                            
+                            # Download option
+                            csv = df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download Results as CSV",
+                                data=csv,
+                                file_name="sentiment_analysis_results.csv",
+                                mime="text/csv"
+                            )
+                            
+                        except Exception as e:
+                            st.error(f"Error during batch analysis: {e}")
+                else:
+                    st.warning("Please enter at least one valid text to analyze.")
+            else:
+                st.warning("Please enter some texts to analyze.")
+    
+    with tab3:
+        st.header("Test Examples")
+        st.markdown("Test your model with these predefined examples:")
+        
+        test_cases = [
+            ("I love this product! It's absolutely amazing!", "Should be POSITIVE"),
+            ("This is terrible and awful. Worst purchase ever.", "Should be NEGATIVE"),
+            ("It's okay, nothing special about it.", "Should be NEUTRAL"),
+            ("The product is perfect and excellent!", "Should be POSITIVE"),
+            ("This is the worst experience I've ever had.", "Should be NEGATIVE"),
+            ("It's fine, I have no strong feelings.", "Should be NEUTRAL")
+        ]
+        
+        for i, (text, expected) in enumerate(test_cases):
+            if st.button(f"Test: {text[:30]}...", key=f"test_{i}"):
+                with st.spinner("Testing..."):
+                    result = classifier(text)[0]
+                    predicted_sentiment = map_label_to_sentiment(result['label'])
+                    
+                    st.write(f"**Text:** {text}")
+                    st.write(f"**Expected:** {expected}")
+                    st.write(f"**Predicted:** {predicted_sentiment} (confidence: {result['score']:.4f})")
+                    
+                    if expected.split()[-1].lower() == predicted_sentiment.lower():
+                        st.success("✅ Prediction matches expectation!")
+                    else:
+                        st.error("❌ Prediction doesn't match expectation!")
 
-with tab3:
-    st.header("API Usage Example")
-    st.markdown("""
-    ### How to use this model in your code:
-    
-    ```python
-    from transformers import pipeline
-    
-    # Load the model
-    classifier = pipeline(
-        "sentiment-analysis",
-        model="mustehsannisarrao/fine-tune-bert-sentimental-analysis"
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        "**Model:** [mustehsannisarrao/fine-tune-bert-sentimental-analysis]"
+        "(https://huggingface.co/mustehsannisarrao/fine-tune-bert-sentimental-analysis) | "
+        "Built with ❤️ using Streamlit & Hugging Face Transformers"
     )
-    
-    # Analyze text
-    result = classifier("I love this amazing product!")
-    print(result)
-    # Output: [{'label': 'POSITIVE', 'score': 0.998}]
-    
-    # Batch analysis
-    texts = [
-        "This is wonderful!",
-        "I hate this.",
-        "It's okay, nothing special."
-    ]
-    results = classifier(texts)
-    for text, result in zip(texts, results):
-        print(f"Text: {text}")
-        print(f"Sentiment: {result['label']}, Confidence: {result['score']:.4f}")
-        print("---")
-    ```
-    
-    ### Model Information:
-    - **Model Name:** `mustehsannisarrao/fine-tune-bert-sentimental-analysis`
-    - **Task:** Sentiment Analysis
-    - **Framework:** Transformers
-    """)
 
-# Footer
-st.markdown("---")
-st.markdown(
-    "**Model Repository:** [mustehsannisarrao/fine-tune-bert-sentimental-analysis]"
-    "(https://huggingface.co/mustehsannisarrao/fine-tune-bert-sentimental-analysis) | "
-    "Built with ❤️ using Streamlit & Hugging Face"
-)
+if __name__ == "__main__":
+    main()
